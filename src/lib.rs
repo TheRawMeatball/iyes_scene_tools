@@ -1,10 +1,10 @@
 use std::path::Path;
 
-use bevy::prelude::*;
 use bevy::ecs::all_tuples;
-use bevy::ecs::system::SystemState;
 use bevy::ecs::component::ComponentId;
 use bevy::ecs::query::ReadOnlyWorldQuery;
+use bevy::ecs::system::SystemState;
+use bevy::prelude::*;
 use bevy::reflect::TypeRegistry;
 use bevy::scene::DynamicEntity;
 use bevy::utils::{HashMap, HashSet};
@@ -32,47 +32,47 @@ pub enum SceneExportError {
 ///
 /// If what you need cannot be expressed with just a query,
 /// try [`SceneBuilder`].
-pub fn scene_from_query_components<Q, F>(
-    world: &mut World,
-) -> DynamicScene
+pub fn scene_from_query_components<Q, F, M>(world: &mut World) -> DynamicScene
 where
-    Q: ComponentList,
+    Q: ComponentList<M>,
     F: ReadOnlyWorldQuery + 'static,
 {
     let mut ss = SystemState::<Query<Entity, (Q::QueryFilter, F)>>::new(world);
 
-    let type_registry = world.get_resource::<TypeRegistry>()
+    let type_registry = world
+        .get_resource::<TypeRegistry>()
         .expect("The World provided for scene generation does not contain a TypeRegistry")
         .read();
 
     let q = ss.get(world);
 
-    let entities = q.iter().map(|entity| {
-        let get_reflect_by_id = |id|
-            world.components()
-                .get_info(id)
-                .and_then(|info| type_registry.get(info.type_id().unwrap()))
-                .and_then(|reg| reg.data::<ReflectComponent>())
-                .and_then(|rc| rc.reflect(world, entity))
-                .map(|c| c.clone_value());
+    let entities = q
+        .iter()
+        .map(|entity| {
+            let get_reflect_by_id = |id| {
+                world
+                    .components()
+                    .get_info(id)
+                    .and_then(|info| type_registry.get(info.type_id().unwrap()))
+                    .and_then(|reg| reg.data::<ReflectComponent>())
+                    .and_then(|rc| rc.reflect(world, entity))
+                    .map(|c| c.clone_value())
+            };
 
-        // TODO: avoid this allocation somehow?
-        let mut ids = Vec::new();
-        Q::do_component_ids(world, &mut |id| ids.push(id));
+            // TODO: avoid this allocation somehow?
+            let mut ids = Vec::new();
+            Q::do_component_ids(world, &mut |id| ids.push(id));
 
-        let components = ids.into_iter()
-            .filter_map(get_reflect_by_id)
-            .collect();
+            let components = ids.into_iter().filter_map(get_reflect_by_id).collect();
 
-        DynamicEntity {
-            entity: entity.id(),
-            components,
-        }
-    }).collect();
+            DynamicEntity {
+                entity: entity.id(),
+                components,
+            }
+        })
+        .collect();
 
-    DynamicScene {
-        entities,
-    }
+    DynamicScene { entities }
 }
 
 /// Convenience wrapper for [`scene_from_query_components`] to output to file
@@ -81,16 +81,17 @@ where
 ///
 /// On success (if both scene generation and file output succeed), will return
 /// the generated [`DynamicScene`], just in case you need it.
-pub fn scene_file_from_query_components<Q, F>(
+pub fn scene_file_from_query_components<Q, F, M>(
     world: &mut World,
     path: impl AsRef<Path>,
 ) -> Result<DynamicScene, SceneExportError>
 where
-    Q: ComponentList,
+    Q: ComponentList<M>,
     F: ReadOnlyWorldQuery + 'static,
 {
-    let scene = scene_from_query_components::<Q, F>(world);
-    let type_registry = world.get_resource::<TypeRegistry>()
+    let scene = scene_from_query_components::<Q, F, M>(world);
+    let type_registry = world
+        .get_resource::<TypeRegistry>()
         .expect("The World provided for scene generation does not contain a TypeRegistry");
     let data = scene.serialize_ron(type_registry)?;
     std::fs::write(path, &data)?;
@@ -100,15 +101,14 @@ where
 /// Convenience wrapper for [`scene_from_query_components`] to add the scene to the app's assets collection
 ///
 /// Returns an asset handle that can be used for spawning the scene, (with [`DynamicSceneBundle`]).
-pub fn add_scene_from_query_components<Q, F>(
-    world: &mut World,
-) -> Handle<DynamicScene>
+pub fn add_scene_from_query_components<Q, F, M>(world: &mut World) -> Handle<DynamicScene>
 where
-    Q: ComponentList,
+    Q: ComponentList<M>,
     F: ReadOnlyWorldQuery + 'static,
 {
-    let scene = scene_from_query_components::<Q, F>(world);
-    let mut assets = world.get_resource_mut::<Assets<DynamicScene>>()
+    let scene = scene_from_query_components::<Q, F, M>(world);
+    let mut assets = world
+        .get_resource_mut::<Assets<DynamicScene>>()
         .expect("World does not have an Assets<DynamicScene> to add the new scene to");
     assets.add(scene)
 }
@@ -125,46 +125,49 @@ where
 ///
 /// If what you need cannot be expressed with just a query filter,
 /// try [`SceneBuilder`].
-pub fn scene_from_query_filter<F>(
-    world: &mut World,
-) -> DynamicScene
+pub fn scene_from_query_filter<F>(world: &mut World) -> DynamicScene
 where
     F: ReadOnlyWorldQuery + 'static,
 {
     let mut ss = SystemState::<Query<Entity, F>>::new(world);
 
-    let type_registry = world.get_resource::<TypeRegistry>()
+    let type_registry = world
+        .get_resource::<TypeRegistry>()
         .expect("The World provided for scene generation does not contain a TypeRegistry")
         .read();
 
     let q = ss.get(world);
 
-    let entities = q.iter().map(|entity| {
-        let get_reflect_by_id = |id|
-            world.components()
-                .get_info(id)
-                .and_then(|info| type_registry.get(info.type_id().unwrap()))
-                .and_then(|reg| reg.data::<ReflectComponent>())
-                .and_then(|rc| rc.reflect(world, entity))
-                .map(|c| c.clone_value());
+    let entities = q
+        .iter()
+        .map(|entity| {
+            let get_reflect_by_id = |id| {
+                world
+                    .components()
+                    .get_info(id)
+                    .and_then(|info| type_registry.get(info.type_id().unwrap()))
+                    .and_then(|reg| reg.data::<ReflectComponent>())
+                    .and_then(|rc| rc.reflect(world, entity))
+                    .map(|c| c.clone_value())
+            };
 
-        let components = world.entities()
-            .get(entity)
-            .and_then(|eloc| world.archetypes().get(eloc.archetype_id))
-            .into_iter()
-            .flat_map(|a| a.components())
-            .filter_map(get_reflect_by_id)
-            .collect();
+            let components = world
+                .entities()
+                .get(entity)
+                .and_then(|eloc| world.archetypes().get(eloc.archetype_id))
+                .into_iter()
+                .flat_map(|a| a.components())
+                .filter_map(get_reflect_by_id)
+                .collect();
 
-        DynamicEntity {
-            entity: entity.id(),
-            components,
-        }
-    }).collect();
+            DynamicEntity {
+                entity: entity.id(),
+                components,
+            }
+        })
+        .collect();
 
-    DynamicScene {
-        entities,
-    }
+    DynamicScene { entities }
 }
 
 /// Convenience wrapper for [`scene_from_query_filter`] to output to file
@@ -181,7 +184,8 @@ where
     F: ReadOnlyWorldQuery + 'static,
 {
     let scene = scene_from_query_filter::<F>(world);
-    let type_registry = world.get_resource::<TypeRegistry>()
+    let type_registry = world
+        .get_resource::<TypeRegistry>()
         .expect("The World provided for scene generation does not contain a TypeRegistry");
     let data = scene.serialize_ron(type_registry)?;
     std::fs::write(path, &data)?;
@@ -191,14 +195,13 @@ where
 /// Convenience wrapper for [`scene_from_query_filter`] to add the scene to the app's assets collection
 ///
 /// Returns an asset handle that can be used for spawning the scene, (with [`DynamicSceneBundle`]).
-pub fn add_scene_from_query_filter<F>(
-    world: &mut World,
-) -> Handle<DynamicScene>
+pub fn add_scene_from_query_filter<F>(world: &mut World) -> Handle<DynamicScene>
 where
     F: ReadOnlyWorldQuery + 'static,
 {
     let scene = scene_from_query_filter::<F>(world);
-    let mut assets = world.get_resource_mut::<Assets<DynamicScene>>()
+    let mut assets = world
+        .get_resource_mut::<Assets<DynamicScene>>()
         .expect("World does not have an Assets<DynamicScene> to add the new scene to");
     assets.add(scene)
 }
@@ -249,11 +252,13 @@ impl<'w> SceneBuilder<'w> {
     ///
     /// If an entity was added in "all components" mode, then `.build_scene()`
     /// will skip any of these components that it encounters.
-    pub fn ignore_components<Q>(&mut self) -> &mut Self
+    pub fn ignore_components<Q, M>(&mut self) -> &mut Self
     where
-        Q: ComponentList,
+        Q: ComponentList<M>,
     {
-        Q::do_component_ids(self.world, &mut |id| {self.ignored.insert(id);});
+        Q::do_component_ids(self.world, &mut |id| {
+            self.ignored.insert(id);
+        });
         self
     }
 
@@ -299,17 +304,21 @@ impl<'w> SceneBuilder<'w> {
     ///
     /// If you want to select all components, try:
     ///  - [`add_entity`]
-    pub fn add_components_to_entity<Q>(&mut self, e: Entity) -> &mut Self
+    pub fn add_components_to_entity<Q, M>(&mut self, e: Entity) -> &mut Self
     where
-        Q: ComponentList,
+        Q: ComponentList<M>,
     {
         if let Some(item) = self.ec.get_mut(&e) {
             if let ComponentSelection::ByIds(c) = item {
-                Q::do_component_ids(self.world, &mut |id| {c.insert(id);});
+                Q::do_component_ids(self.world, &mut |id| {
+                    c.insert(id);
+                });
             }
         } else {
             let mut c = HashSet::default();
-            Q::do_component_ids(self.world, &mut |id| {c.insert(id);});
+            Q::do_component_ids(self.world, &mut |id| {
+                c.insert(id);
+            });
             self.ec.insert(e, ComponentSelection::ByIds(c));
         }
         self
@@ -341,19 +350,23 @@ impl<'w> SceneBuilder<'w> {
     ///
     /// If you want to select all components, try:
     ///  - [`add_entities`]
-    pub fn add_components_to_entities<I, Q>(&mut self, entities: I) -> &mut Self
+    pub fn add_components_to_entities<I, Q, M>(&mut self, entities: I) -> &mut Self
     where
         I: IntoIterator<Item = Entity>,
-        Q: ComponentList,
+        Q: ComponentList<M>,
     {
         for e in entities {
             if let Some(item) = self.ec.get_mut(&e) {
                 if let ComponentSelection::ByIds(c) = item {
-                    Q::do_component_ids(self.world, &mut |id| {c.insert(id);});
+                    Q::do_component_ids(self.world, &mut |id| {
+                        c.insert(id);
+                    });
                 }
             } else {
                 let mut c = HashSet::default();
-                Q::do_component_ids(self.world, &mut |id| {c.insert(id);});
+                Q::do_component_ids(self.world, &mut |id| {
+                    c.insert(id);
+                });
                 self.ec.insert(e, ComponentSelection::ByIds(c));
             }
         }
@@ -369,9 +382,9 @@ impl<'w> SceneBuilder<'w> {
     ///
     /// If you want to select all components, try:
     ///  - [`add_from_query_filter`]
-    pub fn add_with_components<Q, F>(&mut self) -> &mut Self
+    pub fn add_with_components<Q, F, M>(&mut self) -> &mut Self
     where
-        Q: ComponentList,
+        Q: ComponentList<M>,
         F: ReadOnlyWorldQuery + 'static,
     {
         let mut ss = SystemState::<Query<Entity, (Q::QueryFilter, F)>>::new(self.world);
@@ -379,11 +392,15 @@ impl<'w> SceneBuilder<'w> {
         for e in q.iter() {
             if let Some(item) = self.ec.get_mut(&e) {
                 if let ComponentSelection::ByIds(c) = item {
-                    Q::do_component_ids(self.world, &mut |id| {c.insert(id);});
+                    Q::do_component_ids(self.world, &mut |id| {
+                        c.insert(id);
+                    });
                 }
             } else {
                 let mut c = HashSet::default();
-                Q::do_component_ids(self.world, &mut |id| {c.insert(id);});
+                Q::do_component_ids(self.world, &mut |id| {
+                    c.insert(id);
+                });
                 self.ec.insert(e, ComponentSelection::ByIds(c));
             }
         }
@@ -398,47 +415,50 @@ impl<'w> SceneBuilder<'w> {
     /// All the relevant data will be copied from the `World` that was provided
     /// when the [`SceneBuilder`] was created.
     pub fn build_scene(&self) -> DynamicScene {
-        let type_registry = self.world.get_resource::<TypeRegistry>()
+        let type_registry = self
+            .world
+            .get_resource::<TypeRegistry>()
             .expect("The World provided to the SceneBuilder does not contain a TypeRegistry")
             .read();
 
-        let entities = self.ec.iter().map(|(entity, csel)| {
-            let get_reflect_by_id = |id|
-                self.world.components()
-                    .get_info(id)
-                    .and_then(|info| type_registry.get(info.type_id().unwrap()))
-                    .and_then(|reg| reg.data::<ReflectComponent>())
-                    .and_then(|rc| rc.reflect(self.world, *entity))
-                    .map(|c| c.clone_value());
+        let entities = self
+            .ec
+            .iter()
+            .map(|(entity, csel)| {
+                let get_reflect_by_id = |id| {
+                    self.world
+                        .components()
+                        .get_info(id)
+                        .and_then(|info| type_registry.get(info.type_id().unwrap()))
+                        .and_then(|reg| reg.data::<ReflectComponent>())
+                        .and_then(|rc| rc.reflect(self.world, *entity))
+                        .map(|c| c.clone_value())
+                };
 
-            let components = match csel {
-                ComponentSelection::All => {
-                    self.world.entities()
+                let components = match csel {
+                    ComponentSelection::All => self
+                        .world
+                        .entities()
                         .get(*entity)
                         .and_then(|eloc| self.world.archetypes().get(eloc.archetype_id))
                         .into_iter()
                         .flat_map(|a| a.components())
                         .filter(|id| !self.ignored.contains(&id))
                         .filter_map(get_reflect_by_id)
-                        .collect()
-                },
-                ComponentSelection::ByIds(ids) => {
-                    ids.iter()
-                        .cloned()
-                        .filter_map(get_reflect_by_id)
-                        .collect()
-                },
-            };
+                        .collect(),
+                    ComponentSelection::ByIds(ids) => {
+                        ids.iter().cloned().filter_map(get_reflect_by_id).collect()
+                    }
+                };
 
-            DynamicEntity {
-                entity: entity.id(),
-                components,
-            }
-        }).collect();
+                DynamicEntity {
+                    entity: entity.id(),
+                    components,
+                }
+            })
+            .collect();
 
-        DynamicScene {
-            entities,
-        }
+        DynamicScene { entities }
     }
 
     /// Convenience method: build the scene and serialize to file
@@ -449,7 +469,9 @@ impl<'w> SceneBuilder<'w> {
     /// the generated [`DynamicScene`], just in case you need it.
     pub fn export_to_file(&self, path: impl AsRef<Path>) -> Result<DynamicScene, SceneExportError> {
         let scene = self.build_scene();
-        let type_registry = self.world.get_resource::<TypeRegistry>()
+        let type_registry = self
+            .world
+            .get_resource::<TypeRegistry>()
             .expect("The World provided to the SceneBuilder does not contain a TypeRegistry");
         let data = scene.serialize_ron(type_registry)?;
         std::fs::write(path, &data)?;
@@ -461,7 +483,9 @@ impl<'w> SceneBuilder<'w> {
     /// Returns an asset handle that can be used for spawning the scene, (with [`DynamicSceneBundle`]).
     pub fn build_scene_and_add(&mut self) -> Handle<DynamicScene> {
         let scene = self.build_scene();
-        let mut assets = self.world.get_resource_mut::<Assets<DynamicScene>>()
+        let mut assets = self
+            .world
+            .get_resource_mut::<Assets<DynamicScene>>()
             .expect("World does not have an Assets<DynamicScene> to add the new scene to");
         assets.add(scene)
     }
@@ -472,12 +496,15 @@ impl<'w> SceneBuilder<'w> {
 /// Works similar to Bevy's queries, but only immutable access
 /// (`&T`), optional access (`Option<&T>`), and tuples to combine
 /// multiple types, are supported.
-pub trait ComponentList {
+pub trait ComponentList<M> {
     type QueryFilter: ReadOnlyWorldQuery + 'static;
     fn do_component_ids<F: FnMut(ComponentId)>(world: &World, f: &mut F);
 }
 
-impl<T: Component + Reflect> ComponentList for &T {
+pub struct ComponentMarker;
+pub struct OptComponentMarker;
+
+impl<T: Component + Reflect> ComponentList<ComponentMarker> for T {
     type QueryFilter = With<T>;
     #[inline]
     fn do_component_ids<F: FnMut(ComponentId)>(world: &World, f: &mut F) {
@@ -487,7 +514,7 @@ impl<T: Component + Reflect> ComponentList for &T {
     }
 }
 
-impl<T: Component + Reflect> ComponentList for Option<&T> {
+impl<T: Component + Reflect> ComponentList<OptComponentMarker> for Option<T> {
     type QueryFilter = ();
     #[inline]
     fn do_component_ids<F: FnMut(ComponentId)>(world: &World, f: &mut F) {
@@ -498,8 +525,8 @@ impl<T: Component + Reflect> ComponentList for Option<&T> {
 }
 
 macro_rules! componentlist_impl {
-    ($($x:ident),*) => {
-        impl<$($x: ComponentList),*> ComponentList for ($($x,)*) {
+    ($(($x: ident, $m: ident)),*) => {
+        impl<$($m,)* $($x: ComponentList<$m>),*> ComponentList<($($m,)*)> for ($($x,)*) {
             type QueryFilter = ($($x::QueryFilter,)*);
             #[inline]
             fn do_component_ids<F: FnMut(ComponentId)>(_world: &World, _f: &mut F) {
@@ -509,8 +536,7 @@ macro_rules! componentlist_impl {
     };
 }
 
-all_tuples!(componentlist_impl, 0, 15, T);
+all_tuples!(componentlist_impl, 0, 15, T, M);
 
 #[cfg(test)]
-mod test {
-}
+mod test {}
